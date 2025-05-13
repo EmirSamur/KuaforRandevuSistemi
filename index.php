@@ -507,7 +507,7 @@
             <h1 class="display-4 fw-bold mb-4">VIP Saç Sanatı Deneyimi</h1>
             <p class="lead mb-5">Kişiye özel hizmet anlayışı ve uzman dokunuşlarla stilinizi yeniden keşfedin.</p>
             <a href="randevu_ekle.php" class="btn btn-vip-primary btn-lg me-md-3 mb-3 mb-md-0">Online Randevu Alın</a>
-            <a href="https://wa.me/+905434647965?text=Merhaba,%20randevu%20almak%20istiyorum." class="btn btn-vip-outline btn-lg" target="_blank" rel="noopener noreferrer">
+            <a href="https://wa.me/+9055555555555?text=Merhaba,%20randevu%20almak%20istiyorum." class="btn btn-vip-outline btn-lg" target="_blank" rel="noopener noreferrer">
                 <i class="fab fa-whatsapp me-2"></i>WhatsApp ile Ulaşın
             </a>
         </div>
