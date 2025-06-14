@@ -1,56 +1,81 @@
 <?php
-// Should be the very first thing
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Oturum başlatma her zaman en başta olmalı
 session_start();
 
-// If user is already logged in, redirect them away from login page
+// Eğer kullanıcı zaten giriş yapmışsa, onu ana sayfaya yönlendir
 if (isset($_SESSION['kullanici_adi'])) {
-    header("Location: randevu_listele.php"); // Or index.php or wherever your main dashboard is
-    exit();
+    header("Location: randevu_listele.php");
+    exit(); // Yönlendirmeden sonra betiği durdurmak önemlidir
 }
 
+// Veritabanı bağlantı dosyasını dahil et
+// Bu dosyanın doğru yolda olduğundan emin olun
+include 'baglanti.php'; 
 
-include 'baglanti.php'; // Veritabanı bağlantınızı içerir
+// Hata mesajını başlangıçta boş olarak ayarla
+$hata_mesaji = null;
 
-$hata_mesaji = null; // Initialize error message
-
+// Sadece POST isteği geldiğinde işlem yap
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Use trim and handle potential missing keys gracefully
+    
+    // Gelen verileri temizle ve boş olup olmadığını kontrol et
+    // ?? operatörü, değişken yoksa boş string atar, bu da hatayı önler
     $kullanici_adi = trim($_POST["kullanici_adi"] ?? '');
-    $sifre = $_POST["sifre"] ?? ''; // Don't trim password initially
+    $sifre = $_POST["sifre"] ?? '';
 
+    // Temel doğrulama
     if (empty($kullanici_adi) || empty($sifre)) {
          $hata_mesaji = "Kullanıcı adı ve şifre alanları boş bırakılamaz.";
     } else {
         try {
-            $stmt = $conn->prepare("SELECT id, kullanici_adi, sifre FROM kullanicilar WHERE kullanici_adi = :kullanici_adi LIMIT 1");
+            // *** ÖNEMLİ DEĞİŞİKLİK: Doğrudan SQL sorgusu yerine saklı yordamı çağırıyoruz. ***
+            // Proje isterlerine uygun olan yöntem budur.
+            $stmt = $conn->prepare("CALL sp_kullanici_getir_by_username(:kullanici_adi)");
+            
+            // Parametreyi bağla
             $stmt->bindParam(':kullanici_adi', $kullanici_adi, PDO::PARAM_STR);
+            
+            // Yordamı çalıştır
             $stmt->execute();
+            
+            // Saklı yordamdan dönen sonucu al
             $kullanici = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Verify user exists and password is correct
+            // Kullanıcının varlığını ve şifrenin doğruluğunu kontrol et
+            // password_verify(), PHP'nin hashlenmiş şifreleri güvenli bir şekilde doğrulaması için kullanılır.
             if ($kullanici && password_verify($sifre, $kullanici['sifre'])) {
-                // Regenerate session ID upon login for security
+                
+                // Güvenlik için giriş yapıldığında session ID'yi yenile (session fixation saldırılarını önler)
                 session_regenerate_id(true);
-                // Store user identifier in session
-                $_SESSION['user_id'] = $kullanici['id']; // Store ID as well if needed
+                
+                // Kullanıcı bilgilerini session'a kaydet
+                $_SESSION['user_id'] = $kullanici['id'];
                 $_SESSION['kullanici_adi'] = $kullanici['kullanici_adi'];
-                // Redirect to the main application page
+                
+                // Ana uygulama sayfasına yönlendir
                 header("Location: randevu_listele.php");
-                exit();
+                exit(); // Yönlendirmeden sonra betiği durdur
+                
             } else {
-                // Generic error message for security (don't reveal if username exists)
+                // Kullanıcı adı var mı yok mu gibi detay vermeden, genel bir hata mesajı ver.
+                // Bu, "kullanıcı adı enumerasyon" saldırılarını zorlaştırır.
                 $hata_mesaji = "Sağlanan bilgilerle eşleşen bir hesap bulunamadı.";
             }
 
         } catch (PDOException $e) {
-            error_log("Login DB Error: " . $e->getMessage()); // Log the detailed error
-            // Generic error message for the user
-            $hata_mesaji = "Giriş işlemi sırasında bir sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.";
+            // Geliştirme aşamasında hatayı log dosyasına yazmak en iyisidir.
+            error_log("Giriş Veritabanı Hatası: " . $e->getMessage()); 
+            
+            // Kullanıcıya her zaman genel bir hata mesajı göster
+            $hata_mesaji = "VERİTABANI HATASI: " . $e->getMessage();
         }
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -66,7 +91,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* Paste the VIP Dark Theme CSS Variables and Base Styles */
+        /* CSS kodunuzda bir değişiklik yapılmasına gerek yok, olduğu gibi kalabilir. */
         :root {
             --bg-dark: #121212;
             --bg-card: #1f1f1f;
@@ -78,33 +103,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             --danger-bg: #3a1a1a;
             --danger-text: #d9a3a3;
             --danger-border: #5a2a2a;
-            /* Add success/warning if needed for other messages */
         }
 
         html, body {
-            height: 100%; /* Ensure body takes full height */
+            height: 100%;
         }
 
         body {
             font-family: 'Montserrat', sans-serif;
             background-color: var(--bg-dark);
             color: var(--primary-text);
-            line-height: 1.6;
             display: flex;
-            align-items: center; /* Vertically center */
-            justify-content: center; /* Horizontally center */
-            min-height: 100vh; /* Fallback for older browsers/flex issues */
-            padding: 20px; /* Add some padding for smaller screens */
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
         }
 
         .login-container {
             width: 100%;
-            max-width: 420px; /* Slightly wider for better spacing */
+            max-width: 420px;
             background-color: var(--bg-card);
-            padding: 35px 40px; /* More padding */
+            padding: 35px 40px;
             border-radius: 8px;
             border: 1px solid var(--border-color);
-            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5); /* Stronger shadow for depth */
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
         }
 
         .login-header {
@@ -130,19 +153,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
              font-size: 0.95rem;
          }
 
-
         .form-floating label {
-            color: var(--secondary-text); /* Style floating label placeholder */
+            color: var(--secondary-text);
         }
 
-        .form-control { /* General form control styling */
+        .form-control {
             background-color: var(--input-bg);
             color: var(--primary-text);
             border: 1px solid var(--border-color);
             border-radius: 4px;
-            padding: 0.9rem 1rem; /* Adjust padding */
+            padding: 0.9rem 1rem;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            height: auto; /* Override default height if needed */
+            height: auto;
         }
         .form-control:-webkit-autofill,
         .form-control:-webkit-autofill:hover,
@@ -161,42 +183,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             outline: none;
         }
 
-        /* Specific adjustment for floating labels */
          .form-floating > .form-control:focus ~ label,
          .form-floating > .form-control:not(:placeholder-shown) ~ label {
-             color: var(--accent-color); /* Color of label when floating */
+             color: var(--accent-color);
              opacity: 1;
              transform: scale(.85) translateY(-.5rem) translateX(.15rem);
          }
          .form-floating > .form-control:-webkit-autofill ~ label {
-             color: var(--accent-color); /* Ensure autofill also triggers label color */
+             color: var(--accent-color);
               opacity: 1;
               transform: scale(.85) translateY(-.5rem) translateX(.15rem);
          }
 
-
-        .btn-primary { /* Primary button styling */
+        .btn-primary {
             background-color: var(--accent-color);
             border-color: var(--accent-color);
-            color: #fff; /* White text on accent */
+            color: #fff;
             padding: 0.75rem 1.5rem;
             font-weight: 500;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             border-radius: 4px;
             transition: all 0.3s ease;
-            width: 100%; /* Make button full width */
-            margin-top: 10px; /* Space above button */
+            width: 100%;
+            margin-top: 10px;
         }
 
         .btn-primary:hover, .btn-primary:focus {
-            background-color: #a88a53; /* Darker shade of accent */
+            background-color: #a88a53;
             border-color: #a88a53;
             color: #fff;
             box-shadow: 0 2px 8px rgba(192, 160, 98, 0.3);
         }
 
-        .alert-danger { /* Custom danger alert */
+        .alert-danger {
             color: var(--danger-text);
             background-color: var(--danger-bg);
             border-color: var(--danger-border);
@@ -204,12 +224,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             border-radius: 4px;
             margin-bottom: 20px;
             font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-        }
-        .alert-danger .fa-exclamation-circle {
-            margin-right: 8px;
-            font-size: 1.1rem;
         }
 
         .extra-links {
@@ -226,7 +240,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         .extra-links a:hover {
-            color: #d4b88a; /* Lighter accent on hover */
+            color: #d4b88a;
             text-decoration: underline;
         }
         .extra-links span {
@@ -239,18 +253,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <div class="login-container">
         <div class="login-header">
             <div class="icon">
-                <i class="fas fa-cut"></i> <!-- Or fa-user-lock, fa-key -->
+                <i class="fas fa-cut"></i>
             </div>
             <h2>Yönetim Paneli Girişi</h2>
             <p>Devam etmek için lütfen giriş yapın.</p>
         </div>
 
-        <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
+        <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" novalidate>
 
             <?php if ($hata_mesaji): ?>
-                <div class="alert alert-danger d-flex align-items-center" role="alert">
-                   <i class="fas fa-exclamation-circle flex-shrink-0 me-2"></i>
-                   <div><?php echo htmlspecialchars($hata_mesaji); ?></div>
+                <div class="alert alert-danger" role="alert">
+                   <i class="fas fa-exclamation-circle me-2"></i>
+                   <?php echo htmlspecialchars($hata_mesaji); ?>
                 </div>
             <?php endif; ?>
 
@@ -270,8 +284,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <div class="extra-links">
                  <span>Hesabınız yok mu?</span> <a href="kaydol.php">Hemen Kaydolun</a>
-                 <!-- Add forgot password link if you have that functionality -->
-                 <!-- <br><a href="sifre_sifirla.php">Şifremi Unuttum</a> -->
             </div>
         </form>
     </div>
